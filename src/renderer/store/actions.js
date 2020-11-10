@@ -3,15 +3,29 @@ import { httpGet } from '../utils/request'
 import { author, name } from '../../../package.json'
 
 export default {
-  getVersionInfo() {
+  getVersionInfo(state, retryNum = 0) {
     return new Promise((resolve, reject) => {
-      httpGet(`https://raw.githubusercontent.com/${author.name}/${name}/master/publish/version.json`, (err, resp, body) => {
+      httpGet(`https://raw.githubusercontent.com/${author.name}/${name}/master/publish/version.json`, {
+        timeout: 20000,
+      }, (err, resp, body) => {
         if (err) {
-          return resolve({
-            version: '0.0.0',
-            desc: '<h3>版本信息获取失败</h3><ul><li>更新信息获取失败，可能是无法访问Github导致的，请手动检查更新！</li><li>检查方法：去设置-关于洛雪音乐打开<strong>开源地址</strong>或<strong>网盘地址</strong>查看<strong>版本号</strong>与当前版本对比是否最新</li></ul>',
-            history: [],
-          })
+          return ++retryNum > 3
+            ? this.dispatch('getVersionInfo2').then(resolve).catch(reject)
+            : this.dispatch('getVersionInfo', retryNum).then(resolve).catch(reject)
+        }
+        resolve(body)
+      })
+    })
+  },
+  getVersionInfo2(state, retryNum = 0) {
+    return new Promise((resolve, reject) => {
+      httpGet('https://cdn.stsky.cn/lx-music/desktop/version.json', {
+        timeout: 20000,
+      }, (err, resp, body) => {
+        if (err) {
+          return ++retryNum > 3
+            ? reject(err)
+            : this.dispatch('getVersionInfo2', retryNum).then(resolve).catch(reject)
         }
         resolve(body)
       })

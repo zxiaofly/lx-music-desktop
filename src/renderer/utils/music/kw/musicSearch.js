@@ -42,6 +42,7 @@ export default {
   // },
   handleResult(rawData) {
     const result = []
+    if (!rawData) return result
     for (let i = 0; i < rawData.length; i++) {
       const info = rawData[i]
       let songId = info.MUSICRID.replace('MUSIC_', '')
@@ -66,12 +67,12 @@ export default {
                 size: info[3].toLocaleUpperCase(),
               }
               break
-            case 'ape':
-              types.push({ type: 'ape', size: info[3] })
-              _types.ape = {
-                size: info[3].toLocaleUpperCase(),
-              }
-              break
+            // case 'ape':
+            //   types.push({ type: 'ape', size: info[3] })
+            //   _types.ape = {
+            //     size: info[3].toLocaleUpperCase(),
+            //   }
+            //   break
             case 'mp3':
               switch (info[1]) {
                 case '320':
@@ -81,11 +82,11 @@ export default {
                   }
                   break
                 case '192':
-                  types.push({ type: '192k', size: info[3] })
-                  _types['192k'] = {
-                    size: info[3].toLocaleUpperCase(),
-                  }
-                  break
+                //   types.push({ type: '192k', size: info[3] })
+                //   _types['192k'] = {
+                //     size: info[3].toLocaleUpperCase(),
+                //   }
+                //   break
                 case '128':
                   types.push({ type: '128k', size: info[3] })
                   _types['128k'] = {
@@ -112,7 +113,7 @@ export default {
         albumId: decodeName(info.ALBUMID || ''),
         interval: Number.isNaN(interval) ? 0 : formatPlayTime(interval),
         albumName: info.ALBUM ? decodeName(info.ALBUM) : '',
-        lyric: null,
+        lrc: null,
         img: null,
         types,
         _types,
@@ -121,11 +122,13 @@ export default {
     }
     return result
   },
-  search(str, page = 1, { limit }) {
+  search(str, page = 1, { limit } = {}, retryNum = 0) {
+    if (retryNum > 2) return Promise.reject(new Error('try max num'))
     if (limit != null) this.limit = limit
     // http://newlyric.kuwo.cn/newlyric.lrc?62355680
     return this.musicSearch(str, page).then(result => {
-      if (!result || (result.TOTAL !== '0' && result.SHOW === '0')) return this.search(str, page, { limit })
+      // console.log(result)
+      if (!result || (result.TOTAL !== '0' && result.SHOW === '0')) return this.search(str, page, { limit }, ++retryNum)
       let list = this.handleResult(result.abslist)
 
       if (list == null) return this.search(str, page, { limit })
@@ -138,6 +141,8 @@ export default {
         list,
         allPage: this.allPage,
         total: this.total,
+        limit: this.limit,
+        source: 'kw',
       })
     })
   },

@@ -2,7 +2,7 @@
 div.scroll(:class="$style.tab")
   //- div(:class="$style.content")
   ul
-    li(v-for="item in list" :key="itemKey ? item[itemKey] : item" :class="value === (itemKey ? item[itemKey] : item) ? $style.active : ''")
+    li.ignore-to-rem(v-for="item in list" :key="itemKey ? item[itemKey] : item" :class="value === (itemKey ? item[itemKey] : item) ? $style.active : ''")
       button(type="button"
         @click="handleClick(itemKey ? item[itemKey] : item)") {{ itemName ? item[itemName] : item }}
   //- div(:class="$style.control")
@@ -60,30 +60,33 @@ export default {
     li {
       position: relative;
       flex: none;
-      margin-bottom: -2px;
       border-top: 2px solid @color-tab-border-top;
       border-left: 2px solid @color-tab-btn-background;
       border-right: 2px solid @color-tab-btn-background;
       // box-sizing: border-box;
       transition: border-color @transition-theme;
-      margin-left: -2px;
 
-      &::after {
+      &:global(.ignore-to-rem) {
+        margin-left: -2px;
+        margin-bottom: -2px;
+        &:after, &:before {
+          height: 2px;
+        }
+      }
+      &:after {
         content: ' ';
         display: block;
         width: 50%;
-        height: 2px;
         position: absolute;
         bottom: 0;
         left: 0;
         background-color: @color-tab-border-bottom;
         transition: width @transition-theme;
       }
-      &::before {
+      &:before {
         content: ' ';
         display: block;
         width: 50%;
-        height: 2px;
         position: absolute;
         bottom: 0;
         right: 0;
@@ -95,34 +98,35 @@ export default {
         margin-left: 0;
         button {
           border-top-left-radius: 3px;
-          // border-bottom-left-radius: 3px;
+          // border-bottom-left-radius: @radius-border;
         }
       }
       &:last-child {
         border-right: 2px solid @color-tab-border-top;
-        border-top-right-radius: 3px;
+        border-top-right-radius: @radius-border;
         button {
           border-top-right-radius: 3px;
-          // border-bottom-right-radius: 3px;
+          // border-bottom-right-radius: @radius-border;
         }
       }
       button {
         display: inline-block;
         border: none;
         cursor: pointer;
-        padding: 5px 10px 7px;
+        padding: 0 10px;
         font-size: 12px;
+        min-width: 56px;
         // color: @color-btn;
         outline: none;
         transition: background-color @transition-theme;
         background-color: @color-tab-btn-background;
-
+        line-height: 28px;
       }
       &:hover {
         // border-left-color: @color-theme_2-hover;
         // border-right-color: @color-theme_2-hover;
         button {
-          background-color: @color-theme_2-hover;
+          background-color: @color-tab-btn-background-hover;
         }
       }
       &:active {
@@ -133,7 +137,7 @@ export default {
         }
       }
       &.active {
-        border-bottom-color: @color-theme_2;
+        border-bottom-color: @color-theme_2-background_1;
         border-top-color: @color-tab-border-bottom;
         border-left-color: @color-tab-border-bottom;
         border-right-color: @color-tab-border-bottom;
@@ -144,7 +148,7 @@ export default {
           width: 0;
         }
         button {
-          background-color: @color-theme_2;
+          background-color: @color-theme_2-background_1;
         }
       }
     }
@@ -193,7 +197,7 @@ each(@themes, {
             // border-left-color: ~'@{color-@{value}-theme_2-hover}';
             // border-right-color: ~'@{color-@{value}-theme_2-hover}';
             button {
-              background-color: ~'@{color-@{value}-theme_2-hover}';
+              background-color: ~'@{color-@{value}-tab-btn-background-hover}';
             }
           }
           &:active {
@@ -209,7 +213,7 @@ each(@themes, {
             border-left-color: ~'@{color-@{value}-tab-border-bottom}';
             border-right-color: ~'@{color-@{value}-tab-border-bottom}';
             button {
-              background-color: ~'@{color-@{value}-theme_2}';
+              background-color: ~'@{color-@{value}-theme_2-background_1}';
             }
           }
         }

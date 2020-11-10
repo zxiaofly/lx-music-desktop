@@ -1,4 +1,4 @@
-import { httpFatch } from '../../request'
+import { httpFetch } from '../../request'
 import { formatPlayTime, toMD5 } from '../../index'
 import CryptoJS from 'crypto-js'
 
@@ -7,8 +7,8 @@ export default {
   _requestObj_list: null,
   _requestObj_listRecommend: null,
   _requestObj_listDetail: null,
-  limit_list: 20,
-  limit_song: 25,
+  limit_list: 30,
+  limit_song: 10000,
   successCode: 22000,
   sortList: [
     {
@@ -20,6 +20,10 @@ export default {
       id: '0',
     },
   ],
+  regExps: {
+    // http://music.taihe.com/songlist/566347741
+    listDetailLink: /^.+\/songlist\/(\d+)(?:\?.*|&.*$|#.*$|$)/,
+  },
   aesPassEncod(jsonData) {
     let timestamp = Math.floor(Date.now() / 1000)
     let privateKey = toMD5('baidu_taihe_music_secret_key' + timestamp).substr(8, 16)
@@ -108,14 +112,16 @@ export default {
   },
 
   // 获取标签
-  getTags() {
+  getTags(tryNum = 0) {
     if (this._requestObj_tags) this._requestObj_tags.cancelHttp()
-    this._requestObj_tags = httpFatch(this.getTagsUrl())
+    if (tryNum > 2) return Promise.reject(new Error('try max num'))
+    this._requestObj_tags = httpFetch(this.getTagsUrl())
     return this._requestObj_tags.promise.then(({ body }) => {
-      if (body.error_code !== this.successCode) return this.getTags()
+      if (body.error_code !== this.successCode) return this.getTags(++tryNum)
       return {
         hotTag: this.filterInfoHotTag(body.result.hot),
         tags: this.filterTagInfo(body.result.tags),
+        source: 'bd',
       }
     })
   },
@@ -123,6 +129,7 @@ export default {
     return rawList.map(item => ({
       name: item,
       id: item,
+      source: 'bd',
     }))
   },
   filterTagInfo(rawList) {
@@ -133,23 +140,24 @@ export default {
         parent_name: type.first,
         id: item,
         name: item,
+        source: 'bd',
       })),
     }))
   },
 
   // 获取列表数据
-  getList(sortId, tagId, page) {
+  getList(sortId, tagId, page, tryNum = 0) {
     if (this._requestObj_list) this._requestObj_list.cancelHttp()
-    this._requestObj_list = httpFatch(
-      this.getListUrl(sortId, tagId, page)
-    )
+    if (tryNum > 2) return Promise.reject(new Error('try max num'))
+    this._requestObj_list = httpFetch(this.getListUrl(sortId, tagId, page))
     return this._requestObj_list.promise.then(({ body }) => {
-      // if (body.error_code !== this.successCode) return this.getList(sortId, tagId, page)
+      if (body.error_code !== this.successCode) return this.getList(sortId, tagId, page, ++tryNum)
       return {
         list: this.filterList(body.diyInfo),
         total: body.nums,
         page,
         limit: this.limit_list,
+        source: 'bd',
       }
     })
   },
@@ -174,23 +182,34 @@ export default {
       img: item.list_pic_large || item.list_pic,
       grade: item.grade,
       desc: item.desc || item.tag,
+      source: 'bd',
     }))
   },
 
   // 获取歌曲列表内的音乐
-  getListDetail(id, page) {
-    if (this._requestObj_listDetail) {
-      this._requestObj_listDetail.cancelHttp()
-    }
-    this._requestObj_listDetail = httpFatch(this.getListDetailUrl(id, page))
+  getListDetail(id, page, tryNum = 0) {
+    if (this._requestObj_listDetail) this._requestObj_listDetail.cancelHttp()
+    if (tryNum > 2) return Promise.reject(new Error('try max num'))
+
+    if ((/[?&:/]/.test(id))) id = id.replace(this.regExps.listDetailLink, '$1')
+
+    this._requestObj_listDetail = httpFetch(this.getListDetailUrl(id, page))
     return this._requestObj_listDetail.promise.then(({ body }) => {
-      if (body.error_code !== this.successCode) return this.getListDetail(id, page)
+      if (body.error_code !== this.successCode) return this.getListDetail(id, page, ++tryNum)
       let listData = this.filterData(body.result.songlist)
       return {
         list: listData,
         page,
         limit: this.limit_song,
         total: body.result.song_num,
+        source: 'bd',
+        info: {
+          name: body.result.info.list_title,
+          img: body.result.info.list_pic,
+          desc: body.result.info.list_desc,
+          author: body.result.info.userinfo.username,
+          play_count: this.formatPlayCount(body.result.listen_num),
+        },
       }
     })
   },

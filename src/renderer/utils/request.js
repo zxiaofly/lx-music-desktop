@@ -1,13 +1,44 @@
-import request from 'request'
+import needle from 'needle'
 // import progress from 'request-progress'
 import { debugRequest } from './env'
 import { requestMsg } from './message'
 import { bHh } from './music/options'
+import { deflateRaw } from 'zlib'
+import { getProxyInfo } from './index'
 // import fs from 'fs'
 
-const headers = {
+const request = (url, options, callback) => {
+  let data
+  if (options.body) {
+    data = options.body
+  } else if (options.form) {
+    data = options.form
+    // data.content_type = 'application/x-www-form-urlencoded'
+    options.json = false
+  } else if (options.formData) {
+    data = options.formData
+    // data.content_type = 'multipart/form-data'
+    options.json = false
+  }
+  options.response_timeout = options.timeout
+  return needle.request(options.method || 'get', url, data, options, (err, resp, body) => {
+    if (!err) {
+      body = resp.body = resp.raw.toString()
+      try {
+        resp.body = JSON.parse(resp.body)
+      } catch (_) {}
+      body = resp.body
+    }
+    callback(err, resp, body)
+  }).request
+}
+
+
+const defaultHeaders = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36',
 }
+// var proxyUrl = "http://" + user + ":" + password + "@" + host + ":" + port;
+// var proxiedRequest = request.defaults({'proxy': proxyUrl});
 
 /**
  * promise 形式的请求方法
@@ -15,39 +46,32 @@ const headers = {
  * @param {*} options
  */
 const buildHttpPromose = (url, options) => {
-  let requestObj
-  let cancelFn
-  const p = new Promise((resolve, reject) => {
-    cancelFn = reject
+  let obj = {
+    isCancelled: false,
+  }
+  obj.promise = new Promise((resolve, reject) => {
+    obj.cancelFn = reject
     debugRequest && console.log(`\n---send request------${url}------------`)
-    requestObj = fatchData(url, options.method, options, (err, resp, body) => {
+    fetchData(url, options.method, options, (err, resp, body) => {
     // options.isShowProgress && window.api.hideProgress()
       debugRequest && console.log(`\n---response------${url}------------`)
-      debugRequest && console.log(JSON.stringify(body))
-      requestObj = null
-      cancelFn = null
-      if (err) {
-        console.log(err.code)
-        if (err.code === 'ETIMEDOUT' || err.code == 'ESOCKETTIMEDOUT') {
-          const { promise, cancelHttp } = httpFatch(url, options)
-          obj.cancelHttp = cancelHttp
-          promise.then()
-        }
-        return reject(err)
-      }
+      debugRequest && console.log(body)
+      obj.requestObj = null
+      obj.cancelFn = null
+      if (err) return reject(err)
       resolve(resp)
+    }).then(ro => {
+      obj.requestObj = ro
+      if (obj.isCancelled) obj.cancelHttp()
     })
   })
-  const obj = {
-    promise: p,
-    cancelHttp() {
-      if (!requestObj) return
-      console.log('cancel')
-      cancelHttp(requestObj)
-      cancelFn(new Error(requestMsg.cancelRequest))
-      requestObj = null
-      cancelFn = null
-    },
+  obj.cancelHttp = () => {
+    if (!obj.requestObj) return obj.isCancelled = true
+    cancelHttp(obj.requestObj)
+    obj.requestObj = null
+    obj.promise = obj.cancelHttp = null
+    obj.cancelFn(new Error(requestMsg.cancelRequest))
+    obj.cancelFn = null
   }
   return obj
 }
@@ -57,21 +81,23 @@ const buildHttpPromose = (url, options) => {
  * @param {*} url
  * @param {*} options
  */
-export const httpFatch = (url, options = { method: 'get' }) => {
+export const httpFetch = (url, options = { method: 'get' }) => {
   const requestObj = buildHttpPromose(url, options)
   requestObj.promise = requestObj.promise.catch(err => {
-    if (err.code === 'ETIMEDOUT' || err.code == 'ESOCKETTIMEDOUT') {
-      const { promise, cancelHttp } = httpFatch(url, options)
-      requestObj.cancelHttp()
-      requestObj.cancelHttp = cancelHttp
-      return promise
-    }
+    // console.log('出错', err)
     if (err.message === 'socket hang up') {
       // window.globalObj.apiSource = 'temp'
       return Promise.reject(new Error(requestMsg.unachievable))
     }
-    if (err.code === 'ENOTFOUND') return Promise.reject(new Error(requestMsg.notConnectNetwork))
-    return Promise.reject(err)
+    switch (err.code) {
+      case 'ETIMEDOUT':
+      case 'ESOCKETTIMEDOUT':
+        return Promise.reject(new Error(requestMsg.timeout))
+      case 'ENOTFOUND':
+        return Promise.reject(new Error(requestMsg.notConnectNetwork))
+      default:
+        return Promise.reject(err)
+    }
   })
   return requestObj
 }
@@ -81,8 +107,10 @@ export const httpFatch = (url, options = { method: 'get' }) => {
  * @param {*} index
  */
 export const cancelHttp = requestObj => {
+  // console.log(requestObj)
   if (!requestObj) return
-  console.log('cancel:', requestObj.href)
+  console.log('cancel:', requestObj)
+  if (!requestObj.abort) return
   requestObj.abort()
 }
 
@@ -104,10 +132,10 @@ export const http = (url, options, cb) => {
   if (options.method == null) options.method = 'get'
 
   debugRequest && console.log(`\n---send request------${url}------------`)
-  return fatchData(url, options.method, options, (err, resp, body) => {
+  return fetchData(url, options.method, options, (err, resp, body) => {
     // options.isShowProgress && window.api.hideProgress()
     debugRequest && console.log(`\n---response------${url}------------`)
-    debugRequest && console.log(JSON.stringify(body))
+    debugRequest && console.log(body)
     if (err) {
       debugRequest && console.log(JSON.stringify(err))
     }
@@ -133,10 +161,10 @@ export const httpGet = (url, options, callback) => {
   // })
 
   debugRequest && console.log(`\n---send request-------${url}------------`)
-  return fatchData(url, 'get', options, function(err, resp, body) {
+  return fetchData(url, 'get', options, function(err, resp, body) {
     // options.isShowProgress && window.api.hideProgress()
     debugRequest && console.log(`\n---response------${url}------------`)
-    debugRequest && console.log(JSON.stringify(body))
+    debugRequest && console.log(body)
     if (err) {
       debugRequest && console.log(JSON.stringify(err))
     }
@@ -164,10 +192,10 @@ export const httpPost = (url, data, options, callback) => {
   options.data = data
 
   debugRequest && console.log(`\n---send request-------${url}------------`)
-  return fatchData(url, 'post', options, function(err, resp, body) {
+  return fetchData(url, 'post', options, function(err, resp, body) {
     // options.isShowProgress && window.api.hideProgress()
     debugRequest && console.log(`\n---response------${url}------------`)
-    debugRequest && console.log(JSON.stringify(body))
+    debugRequest && console.log(body)
     if (err) {
       debugRequest && console.log(JSON.stringify(err))
     }
@@ -201,10 +229,10 @@ export const http_jsonp = (url, options, callback) => {
   // })
 
   debugRequest && console.log(`\n---send request-------${url}------------`)
-  return fatchData(url, 'get', options, function(err, resp, body) {
+  return fetchData(url, 'get', options, function(err, resp, body) {
     // options.isShowProgress && window.api.hideProgress()
     debugRequest && console.log(`\n---response------${url}------------`)
-    debugRequest && console.log(JSON.stringify(body))
+    debugRequest && console.log(body)
     if (err) {
       debugRequest && console.log(JSON.stringify(err))
     } else {
@@ -215,25 +243,40 @@ export const http_jsonp = (url, options, callback) => {
   })
 }
 
-const fatchData = (url, method, options, callback) => {
+const handleDeflateRaw = data => new Promise((resolve, reject) => {
+  deflateRaw(data, (err, buf) => {
+    if (err) return reject(err)
+    resolve(buf)
+  })
+})
+
+const regx = /(?:\d\w)+/g
+
+const fetchData = async(url, method, {
+  headers = {},
+  format = 'json',
+  timeout = 15000,
+  ...options
+}, callback) => {
   // console.log(url, options)
   console.log('---start---', url)
-  if (options.headers && options.headers[bHh]) {
+  headers = Object.assign({}, headers)
+  if (headers[bHh]) {
     let s = Buffer.from(bHh, 'hex').toString()
     s = s.replace(s.substr(-1), '')
     s = Buffer.from(s, 'base64').toString()
-    options.headers[s] = !!s
-    delete options.headers[bHh]
+    let v = process.versions.app.split('-')[0].split('.').map(n => n.length < 3 ? n.padStart(3, '0') : n).join('')
+    let v2 = process.versions.app.split('-')[1] || ''
+    headers[s] = !s || `${(await handleDeflateRaw(Buffer.from(JSON.stringify(`${url}${v}`.match(regx), null, 1).concat(v)).toString('base64'))).toString('hex')}&${parseInt(v)}${v2}`
+    delete headers[bHh]
   }
   return request(url, {
+    ...options,
     method,
-    headers: Object.assign({}, headers, options.headers || {}),
-    Origin: options.origin,
-    body: options.body,
-    form: options.form,
-    formData: options.formData,
-    timeout: options.timeout || 10000,
-    json: options.format === undefined || options.format === 'json',
+    headers: Object.assign({}, defaultHeaders, headers),
+    timeout,
+    proxy: getProxyInfo(),
+    json: format === 'json',
   }, (err, resp, body) => {
     if (err) return callback(err, null)
     callback(null, resp, body)

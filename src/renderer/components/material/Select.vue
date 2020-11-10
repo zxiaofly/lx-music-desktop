@@ -1,12 +1,12 @@
 <template lang="pug">
-  div(:class="$style.select")
+  div(:class="[$style.select, show ? $style.active : '']")
     div(:class="$style.label" ref="dom_btn" @click="handleShow") {{value ? itemName ? list.find(l => l.id == value).name : value : ''}}
-    ul(:class="$style.list" ref="dom_list" :style="listStyle")
+    ul(:class="$style.list")
       li(v-for="item in list" @click="handleClick(itemKey ? item[itemKey] : item)") {{itemName ? item[itemName] : item}}
 </template>
 
 <script>
-// import { isChildren } from '../../utils'
+
 export default {
   props: {
     list: {
@@ -28,24 +28,7 @@ export default {
   data() {
     return {
       show: false,
-      listStyle: {
-        height: 0,
-        opacity: 0,
-      },
     }
-  },
-  watch: {
-    show(n) {
-      this.$nextTick(() => {
-        if (n) {
-          this.listStyle.height = this.$refs.dom_list.scrollHeight + 'px'
-          this.listStyle.opacity = 1
-        } else {
-          this.listStyle.height = 0
-          this.listStyle.opacity = 0
-        }
-      })
-    },
   },
   mounted() {
     document.addEventListener('click', this.handleHide)
@@ -80,6 +63,13 @@ export default {
 .select {
   font-size: 12px;
   position: relative;
+
+  &.active {
+    .list {
+      transform: scaleY(1);
+      opacity: 1;
+    }
+  }
 }
 
 .label {
@@ -90,30 +80,33 @@ export default {
   border-left: 2px solid @color-tab-border-bottom;
   box-sizing: border-box;
   text-align: center;
-  border-top-left-radius: 3px;
+  border-top-left-radius: @radius-border;
   color: @color-btn;
   cursor: pointer;
+  .mixin-ellipsis-1;
 
   &:hover {
-    background-color: @color-theme_2-hover;
+    background-color: @color-btn-hover;
   }
   &:active {
-    background-color: @color-theme_2-active;
+    background-color: @color-btn-active;
   }
 }
 
 .list {
   position: absolute;
+  width: 100%;
   top: 100%;
   left: 0;
   border-bottom: 2px solid @color-tab-border-bottom;
   border-left: 2px solid @color-tab-border-bottom;
-  border-bottom-left-radius: 3px;
-  background-color: @color-theme_2;
-  overflow: hidden;
+  border-bottom-left-radius: @radius-border;
+  background-color: @color-theme_2-background_2;
   opacity: 0;
+  transform: scaleY(0);
+  transform-origin: 0 0 0;
   transition: .25s ease;
-  transition-property: height, opacity;
+  transition-property: transform, opacity;
   z-index: 10;
 
   li {
@@ -125,12 +118,13 @@ export default {
     transition: background-color @transition-theme;
     background-color: @color-btn-background;
     box-sizing: border-box;
+    .mixin-ellipsis-1;
 
     &:hover {
-      background-color: @color-theme_2-hover;
+      background-color: @color-btn-hover;
     }
     &:active {
-      background-color: @color-theme_2-active;
+      background-color: @color-btn-active;
     }
   }
 }
@@ -143,24 +137,25 @@ each(@themes, {
       border-left-color: ~'@{color-@{value}-tab-border-bottom}';
       color: ~'@{color-@{value}-btn}';
       &:hover {
-        background-color: ~'@{color-@{value}-theme_2-hover}';
+        background-color: ~'@{color-@{value}-btn-hover}';
       }
       &:active {
-        background-color: ~'@{color-@{value}-theme_2-active}';
+        background-color: ~'@{color-@{value}-btn-active}';
       }
     }
 
     .list {
       border-bottom-color: ~'@{color-@{value}-tab-border-bottom}';
       border-left-color: ~'@{color-@{value}-tab-border-bottom}';
+      background-color: ~'@{color-@{value}-theme_2-background_2}';
       li {
         // color: ~'@{color-@{value}-btn}';
         background-color: ~'@{color-@{value}-btn-background}';
         &:hover {
-          background-color: ~'@{color-@{value}-theme_2-hover}';
+          background-color: ~'@{color-@{value}-btn-hover}';
         }
         &:active {
-          background-color: ~'@{color-@{value}-theme_2-active}';
+          background-color: ~'@{color-@{value}-btn-active}';
         }
       }
     }
